@@ -1,0 +1,86 @@
+﻿version: '3.9'
+
+services:
+  # ====== SQL SERVER DATABASE ======
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: sqlserver
+    ports:
+      - "1433:1433"
+    environment:
+      MSSQL_PID: "Express" 
+      ACCEPT_EULA: Y
+      SA_PASSWORD: ${SA_PASSWORD:-12345aA#}
+    platform: linux/amd64
+    networks:
+      - coffee-store-network
+    restart: always
+    healthcheck:
+      test: ["CMD", "/opt/mssql-tools18/bin/sqlcmd", "-C", "-S", "localhost", "-U", "sa", "-P", "${SA_PASSWORD:-12345aA#}", "-Q", "SELECT 1", "-b"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    deploy: 
+      resources:
+        limits:
+          cpus: "0.7"
+          memory: 1G
+
+  # ====== INIT SCRIPT CONFIGURATOR ======
+  sqlserver.configurator:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: sqlserver.configurator
+    volumes:
+      - ./Scripts/SQLServerInit:/SQLServerInit:ro
+    platform: linux/amd64
+    networks:
+      - coffee-store-network
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    restart: "no"
+    command: >
+      bash -c '
+      /opt/mssql-tools18/bin/sqlcmd -C -S sqlserver -U sa -P ${SA_PASSWORD:-12345aA#} -d master -i SQLServerInit/init.sql;'
+
+  redis:
+    image: redis:7.0-alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+    networks:
+      - coffee-store-network
+    restart: always
+    command: ["redis-server", "--appendonly", "no", "--maxmemory", "100mb", "--maxmemory-policy", "allkeys-lru"]
+    volumes:
+      - redis-data:/data  
+
+  # ====== ASP.NET CORE API ======
+  prn232.lab2.coffeestore.api:
+    image: prn232.lab2.coffeestore.api
+    build:
+      context: .
+      dockerfile: PRN232.Lab2.CoffeeStore.API/Dockerfile
+    container_name: coffeestore.api
+    ports:
+      - "8080:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__DefaultConnection: "Server=sqlserver;Database=CoffeeStoreDB;User ID=sa;Password=${SA_PASSWORD:-12345aA#};TrustServerCertificate=True;"
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+      sqlserver.configurator:
+        condition: service_completed_successfully
+    networks:
+      coffee-store-network:
+        aliases:
+          - coffeestore.localhost
+
+volumes:
+    redis-data:
+
+networks:
+  coffee-store-network:
+    name: coffee-store-network

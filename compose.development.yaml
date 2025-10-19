@@ -1,0 +1,4 @@
+﻿services:
+  prn232.lab2.coffeestore.api:
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development

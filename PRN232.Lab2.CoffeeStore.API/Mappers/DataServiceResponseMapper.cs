@@ -1,0 +1,71 @@
+﻿using Microsoft.AspNetCore.Http.Extensions;
+using Microsoft.AspNetCore.WebUtilities;
+using PRN232.Lab2.CoffeeStore.API.Models.Responses;
+using PRN232.Lab2.CoffeeStore.Services.Models.Responses;
+using System.Text.Json;
+
+namespace PRN232.Lab2.CoffeeStore.API.Mappers
+{
+    public static class DataServiceResponseMapper
+    {
+        private static readonly JsonSerializerOptions HeaderJsonOptions =
+        new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, WriteIndented = false };
+
+        public static DataApiResponse<T> ToDataApiResponse<T>(this DataServiceResponse<T> dataServiceResponse, HttpRequest? request = null,
+            HttpResponse? response = null)
+        {
+            if (typeof(T).IsGenericType && typeof(T).GetGenericTypeDefinition() == typeof(PaginationServiceResponse<>) )
+            {
+                if (response != null && request != null && dataServiceResponse.Data != null)
+                {
+                    dynamic paginationResponse = dataServiceResponse.Data;
+                    var paginationHeader = new PaginationHeader()
+                    {
+                        Page = paginationResponse.Page,
+                        PageSize = paginationResponse.PageSize,
+                        TotalPage = paginationResponse.TotalPage,
+                        TotalCurrentResults = paginationResponse.TotalCurrent,
+                        TotalCount = paginationResponse.TotalCount,
+                        PreviousPageLink = GetPaginationLink(request.GetDisplayUrl(), paginationResponse.Page - 1, paginationResponse.PageSize),
+                        NextPageLink = GetPaginationLink(request.GetDisplayUrl(), paginationResponse.Page + 1, paginationResponse.PageSize),
+                        FirstPageLink = GetPaginationLink(request.GetDisplayUrl(), 0, paginationResponse.PageSize),
+                    };
+
+                    response.Headers["X-Pagination"] = JsonSerializer.Serialize(
+                        paginationHeader, HeaderJsonOptions);
+                }
+            }
+
+            return new DataApiResponse<T>()
+            {
+                Success = dataServiceResponse.Success,
+                Message = dataServiceResponse.Message,
+                Data = dataServiceResponse.Data
+            };
+        }
+
+        private static string GetPaginationLink(string baseUrl, int page, int pageSize)
+        {
+            var baseUri = new Uri(baseUrl);
+
+            // Copy existing query params into a dictionary<string,string>
+            var query = QueryHelpers.ParseQuery(baseUri.Query)
+                .ToDictionary(
+                    k => k.Key,
+                    v => v.Value.ToString()
+                );
+
+            // Replace or add page and pageSize
+            if (page < 0)
+            {
+                page = 0;
+            }
+            query["page"] = page.ToString();
+            query["pageSize"] = pageSize.ToString();
+
+            // Build new URL with updated query params
+            return QueryHelpers.AddQueryString(baseUri.GetLeftPart(UriPartial.Path), query);
+        }
+
+    }
+}
