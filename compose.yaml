@@ -64,9 +64,10 @@ services:
       dockerfile: PRN232.Lab2.CoffeeStore.API/Dockerfile
     container_name: coffeestore.api
     ports:
-      - "8080:8080"
+      - "80:8080"
     environment:
       ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
       ConnectionStrings__DefaultConnection: "Server=sqlserver;Database=CoffeeStoreDB;User ID=sa;Password=${SA_PASSWORD:-12345aA#};TrustServerCertificate=True;"
     depends_on:
       sqlserver:
